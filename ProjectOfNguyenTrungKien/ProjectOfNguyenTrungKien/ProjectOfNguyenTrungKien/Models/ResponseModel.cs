@@ -1,6 +1,6 @@
 ﻿namespace ProjectOfNguyenTrungKien.Models
 {
-    public class ResponseData
+    public class ResponseModel
     {
         public static String now = DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss");
 

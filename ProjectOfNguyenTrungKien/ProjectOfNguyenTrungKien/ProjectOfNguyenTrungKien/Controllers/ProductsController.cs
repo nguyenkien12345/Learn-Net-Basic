@@ -1,9 +1,11 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using ProjectOfNguyenTrungKien.Data;
 using ProjectOfNguyenTrungKien.Enum;
 using ProjectOfNguyenTrungKien.Models;
 using ProjectOfNguyenTrungKien.Response;
 using System;
+using System.Xml.Linq;
 
 namespace ProjectOfNguyenTrungKien.Controllers
 {
@@ -11,8 +13,32 @@ namespace ProjectOfNguyenTrungKien.Controllers
     [ApiController]
     public class ProductsController : ControllerBase
     {
-        public static List<Products> products = new List<Products>();
         public static ResponseMethod responseMethod = new ResponseMethod();
+        private readonly MyDbContext _context;
+        public static String dateData = DateTime.Now.ToString("dd/MM/yyyy");
+        public static String timeData = DateTime.Now.ToString("HH:mm:ss");
+
+        public ProductsController(MyDbContext context)
+        {
+            _context = context;
+        }
+
+        // Tất cả các hàm trong đây đều phải khai báo [] không thì sẽ lỗi khi generate ra swagger
+        // Chúng ta không muốn hiển thị api nào ra swagger thì để prive thay vì public
+
+        [HttpGet("CheckExist/{name}")]
+        private Products CheckProductExists(string name)
+        {
+            var product = _context.Products.Where(x => x.Name.ToLower().Trim() == name.ToLower().Trim()).FirstOrDefault();
+            if(product != null)
+            {
+                return product;
+            }
+            else
+            {
+                return null;
+            }
+        }
 
         // Lấy ra tất cả các sản phẩm
         [HttpGet]
@@ -20,7 +46,7 @@ namespace ProjectOfNguyenTrungKien.Controllers
         {
             try
             {
-                return responseMethod.SuccessResponse(products);
+                return responseMethod.SuccessResponse((Object)_context.Products.ToList());
             }
             catch (Exception ex)
             {
@@ -29,14 +55,13 @@ namespace ProjectOfNguyenTrungKien.Controllers
             }
         }
 
-
         // Lấy ra sản phẩm chi tiết
         [HttpGet("{id}")]
-        public IActionResult GetById(string id) 
+        public IActionResult GetById(string id)
         {
             try
             {
-                var product = products.SingleOrDefault(x => x.Code == Guid.Parse(id));
+                var product = _context.Products.SingleOrDefault(x => x.Code == Guid.Parse(id));
 
                 if (product != null)
                 {
@@ -51,28 +76,41 @@ namespace ProjectOfNguyenTrungKien.Controllers
             catch (Exception ex)
             {
                 //return BadRequest();
-                return responseMethod.ErrorResponse(ex.Message,(int)ErrorCodeBadRequest.BAD_REQUEST_PRODUCT);
+                return responseMethod.ErrorResponse(ex.Message, (int)ErrorCodeBadRequest.BAD_REQUEST_PRODUCT);
             }
         }
 
         // Thêm sản phẩm
         [HttpPost]
-        public IActionResult Create(Products product)
+        public IActionResult Create(ProductsModel productModel)
         {
+            // Lưu ý
+            // product truyền tham số là ProductsModel trong Models chứ không phải Products trong Data
             try
             {
+                var checkExists = CheckProductExists(productModel.Name);
+                if (checkExists != null)
+                {
+                    return responseMethod.ErrorResponse(checkExists, (int)ErrorCodeExists.EXISTS_PRODUCT);
+                }
+
                 var newProduct = new Products
                 {
                     Code = Guid.NewGuid(),
-                    Name = product.Name,
-                    Quantity = product.Quantity,
-                    Active = product.Active,
+                    Name = productModel.Name,
+                    Description = productModel.Description,
+                    Quantity = productModel.Quantity,
+                    Active = productModel.Active,
+                    Price = productModel.Price,
+                    Discount = productModel.Discount,
                 };
-                products.Add(newProduct);
+
+                _context.Products.Add(newProduct);
+                _context.SaveChanges();
 
                 return responseMethod.SuccessResponse(newProduct);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 //return BadRequest();
                 return responseMethod.ErrorResponse(ex.Message, (int)ErrorCodeBadRequest.BAD_REQUEST_PRODUCT);
@@ -81,19 +119,35 @@ namespace ProjectOfNguyenTrungKien.Controllers
 
         // Cập nhật sản phẩm
         [HttpPut("{id}")]
-        public IActionResult Update(string id, Products newProduct)
+        public IActionResult Update(string id, ProductsModel newProductModel)
         {
             try
             {
-                var oldProduct = products.SingleOrDefault(x => x.Code == Guid.Parse(id));
+                var oldProduct = _context.Products.SingleOrDefault(x => x.Code == Guid.Parse(id));
 
                 if (oldProduct != null)
                 {
-                    oldProduct.Name = newProduct.Name;
-                    oldProduct.Quantity = newProduct.Quantity;
-                    oldProduct.Active = newProduct.Active;
+                    var checkExists = CheckProductExists(newProductModel.Name);
+                    if (checkExists != null)
+                    {
+                        return responseMethod.ErrorResponse(checkExists, (int)ErrorCodeExists.EXISTS_PRODUCT);
+                    }
 
-                    return responseMethod.SuccessResponse(newProduct);
+                    oldProduct.Code = Guid.NewGuid();
+                    oldProduct.Name = newProductModel.Name;
+                    oldProduct.Description = newProductModel.Description;
+                    oldProduct.Quantity = newProductModel.Quantity;
+                    oldProduct.Active = newProductModel.Active;
+                    oldProduct.Price = newProductModel.Price;
+                    oldProduct.Discount = newProductModel.Discount;
+                    oldProduct.Time_Updated = timeData;
+                    oldProduct.Date_Updated = dateData;
+                    
+                    
+                    _context.SaveChanges();
+
+                    //return NoContent();
+                    return responseMethod.SuccessResponse(newProductModel);
                 }
                 else
                 {
@@ -114,12 +168,15 @@ namespace ProjectOfNguyenTrungKien.Controllers
         {
             try
             {
-                var product = products.SingleOrDefault(x => x.Code == Guid.Parse(id));
+                var product = _context.Products.SingleOrDefault(x => x.Code == Guid.Parse(id));
 
                 if (product != null)
                 {
-                   products.Remove(product);
-                   return responseMethod.SuccessResponse(product);
+                    _context.Products.Remove(product);
+                    _context.SaveChanges();
+
+                    //return NoContent();
+                    return responseMethod.SuccessResponse(product);
                 }
                 else
                 {
